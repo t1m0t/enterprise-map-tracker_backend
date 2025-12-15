@@ -76,8 +76,6 @@ WHERE
  power is null AND
  amenity is null
 ;
-
-GRANT SELECT ON map_data.v_osm_points_pinds TO pgtileserv_user;
 ```
 
 ### Admin levels
@@ -98,8 +96,6 @@ where
  admin_level = '4'
 ;
 
-GRANT SELECT ON map_data.v_osm_polygons_admin_4 TO pgtileserv_user;
-
 CREATE OR REPLACE VIEW map_data.v_osm_polygons_admin_5
 as select osm_id, admin_level, name, way_area, way
 FROM map_data.planet_osm_polygon
@@ -115,8 +111,6 @@ where
  admin_level = '5'
 ;
 
-GRANT SELECT ON map_data.v_osm_polygons_admin_5 TO pgtileserv_user;
-
 CREATE OR REPLACE VIEW map_data.v_osm_polygons_admin_6
 as select osm_id, admin_level, name, way_area, way
 FROM map_data.planet_osm_polygon
@@ -131,6 +125,4 @@ where
  boundary = 'administrative' and
  admin_level = '6'
 ;
-
-GRANT SELECT ON map_data.v_osm_polygons_admin_6 TO pgtileserv_user;
 ```

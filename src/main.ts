@@ -1,26 +1,45 @@
-import { NestFactory } from "@nestjs/core";
-import {
-	FastifyAdapter,
-	type NestFastifyApplication,
-} from "@nestjs/platform-fastify";
-import { AppModule } from "./app.module";
-import * as dotenv from "dotenv";
-import { ConsoleLogger } from "@nestjs/common";
+import { Hono } from "hono";
+import { paramsTileQuerySchema } from "./schemas/tiles";
+import { validator } from "hono/validator";
+import { type } from "arktype";
 
-if (process.env.NODE_ENV)
-	dotenv.config({ path: `${process.cwd()}/.env.${process.env.NODE_ENV}` });
+const app = new Hono<{ Bindings: Bindings }>();
 
-async function bootstrap() {
-	const app = await NestFactory.create<NestFastifyApplication>(
-		AppModule,
-		new FastifyAdapter(),
-		{
-			logger: new ConsoleLogger({
-				logLevels: ["error", "warn", "log", "debug"],
-			}),
-		},
-	);
-	await app.listen(process.env.PORT ?? 3030);
-}
+app.get(
+	"/tiles/:layer/:z/:x/:y",
+	validator("param", (val, c) => {
+		console.debug("validating: ", val);
+		const parsed = paramsTileQuerySchema(val);
+		if (parsed instanceof type.errors) {
+			// hover out.summary to see validation errors
+			console.error(parsed.summary);
+			return c.text("Invalid url params", 401);
+		} else {
+			return parsed;
+		}
+	}),
+	async (c) => {
+		const { layer, z, x, y } = c.req.valid("param");
 
-bootstrap();
+		const url = `${process.env.TILE_SERVER_BASE_URL}/${layer}/${z}/${x}/${y}.pbf`;
+		console.debug("pg_tileserver url:", url);
+		const upstream = await fetch(url);
+
+		const ct =
+			upstream.headers["content-type"] || "application/vnd.mapbox-vector-tile";
+		c.header("Content-Type", ct);
+
+		// Copy cache headers too if you want
+		const cacheControl = upstream.headers["cache-control"];
+		if (cacheControl) {
+			c.header("Cache-Control", cacheControl);
+		}
+
+		return c.body(await upstream.arrayBuffer(), upstream.status);
+	},
+);
+
+export default {
+	port: 3030,
+	fetch: app.fetch,
+};

@@ -164,4 +164,8 @@ GRANT SELECT ON TABLES TO pgtileserv_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA map_data
 GRANT USAGE ON SEQUENCES TO pgtileserv_user;
 REVOKE ALL ON SCHEMA map_data.FROM pgtileserv_user;
+
+GRANT USAGE ON SCHEMA map_data TO pgtileserv_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA map_data
+GRANT SELECT ON VIEWS TO pgtileserv_user;
 ```

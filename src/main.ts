@@ -3,7 +3,7 @@ import { paramsTileQuerySchema } from "./schemas/tiles";
 import { validator } from "hono/validator";
 import { type } from "arktype";
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono();
 
 app.get(
 	"/tiles/:layer/:z/:x/:y",

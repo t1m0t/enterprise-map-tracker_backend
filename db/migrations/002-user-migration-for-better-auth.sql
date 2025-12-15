@@ -1,16 +1,7 @@
+-- migrate:up
 -- Better Auth core schema (PostgreSQL)
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auth_user') THEN
-    CREATE ROLE auth_user
-      WITH LOGIN PASSWORD 'auth_password';
-  END IF;
-END $$;
-
-CREATE SCHEMA IF NOT EXISTS auth_data AUTHORIZATION auth_user;
-
-CREATE TABLE IF NOT EXISTS "user" (
+CREATE TABLE IF NOT EXISTS auth_data.user (
   "id"            text PRIMARY KEY,
   "name"          text NOT NULL,
   "email"         text NOT NULL,
@@ -20,12 +11,12 @@ CREATE TABLE IF NOT EXISTS "user" (
   "updatedAt"     timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "user_email_uq" ON "user" ("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "user_email_uq" ON auth_data.user ("email");
 
 
-CREATE TABLE IF NOT EXISTS "session" (
+CREATE TABLE IF NOT EXISTS auth_data.session (
   "id"        text PRIMARY KEY,
-  "userId"    text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "userId"    text NOT NULL REFERENCES auth_data.user("id"),
   "token"     text NOT NULL,
   "expiresAt" timestamptz NOT NULL,
   "ipAddress" text NULL,
@@ -34,14 +25,14 @@ CREATE TABLE IF NOT EXISTS "session" (
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "session_token_uq" ON "session" ("token");
-CREATE INDEX IF NOT EXISTS "session_userId_idx" ON "session" ("userId");
-CREATE INDEX IF NOT EXISTS "session_expiresAt_idx" ON "session" ("expiresAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "session_token_uq" ON auth_data.session ("token");
+CREATE INDEX IF NOT EXISTS "session_userId_idx" ON auth_data.session ("userId");
+CREATE INDEX IF NOT EXISTS "session_expiresAt_idx" ON auth_data.session ("expiresAt");
 
 
-CREATE TABLE IF NOT EXISTS "account" (
+CREATE TABLE IF NOT EXISTS auth_data.account (
   "id"                   text PRIMARY KEY,
-  "userId"               text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "userId"               text NOT NULL REFERENCES auth_data.user("id"),
   "accountId"            text NOT NULL,
   "providerId"           text NOT NULL,
   "accessToken"          text NULL,
@@ -56,11 +47,11 @@ CREATE TABLE IF NOT EXISTS "account" (
   CONSTRAINT "account_provider_account_uq" UNIQUE ("providerId", "accountId")
 );
 
-CREATE INDEX IF NOT EXISTS "account_userId_idx" ON "account" ("userId");
-CREATE INDEX IF NOT EXISTS "account_providerId_idx" ON "account" ("providerId");
+CREATE INDEX IF NOT EXISTS "account_userId_idx" ON auth_data.account ("userId");
+CREATE INDEX IF NOT EXISTS "account_providerId_idx" ON auth_data.account ("providerId");
 
 
-CREATE TABLE IF NOT EXISTS "verification" (
+CREATE TABLE IF NOT EXISTS auth_data.verification (
   "id"        text PRIMARY KEY,
   "identifier" text NOT NULL,
   "value"     text NOT NULL,
@@ -69,6 +60,6 @@ CREATE TABLE IF NOT EXISTS "verification" (
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("identifier");
-CREATE INDEX IF NOT EXISTS "verification_expiresAt_idx" ON "verification" ("expiresAt");
+CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON auth_data.verification ("identifier");
+CREATE INDEX IF NOT EXISTS "verification_expiresAt_idx" ON auth_data.verification ("expiresAt");
 

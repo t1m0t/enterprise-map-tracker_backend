@@ -1,57 +1,6 @@
 # DB Setup
 
-## Create SCHEMA
-
 ```sql
--- create schema
-DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT FROM information_schema.schemata WHERE schema_name = 'map_data'
-    ) THEN
-      EXECUTE 'CREATE SCHEMA map_data';
-  END IF;
-END
-$$;
-```
-
-```sql
--- create schema
-DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT FROM information_schema.schemata WHERE schema_name = 'backoffice_data'
-    ) THEN
-      EXECUTE 'CREATE SCHEMA backoffice_data';
-  END IF;
-END
-$$;
-
-```
-
-## Create roles and permissions
-
-```sql
--- ============================================================
--- Strict role separation with GROUP ROLES (PostgreSQL)
--- ============================================================
--- Roles:
---   admin_user        -> DB & role administration only
---   migration_user    -> runs migrations (member of role_migrate)
---   app_user          -> application runtime (member of role_app_rw)
---
--- Group roles (NOLOGIN):
---   role_migrate      -> owns & migrates app schemas
---   role_app_rw       -> runtime CRUD access
---
--- Suggestion:
--- Run as postgres / DB owner:
---   psql -U postgres -d suppavisor_backoffice -f setup_roles.sql
--- ============================================================
-
--- -----------------------
--- 0) Create group roles
--- -----------------------
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_migrate') THEN
@@ -168,4 +117,38 @@ REVOKE ALL ON SCHEMA map_data.FROM pgtileserv_user;
 GRANT USAGE ON SCHEMA map_data TO pgtileserv_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA map_data
 GRANT SELECT ON VIEWS TO pgtileserv_user;
+```
+
+## For auth (adapted for better auth)
+
+```sql
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auth_user') THEN
+    CREATE ROLE auth_user
+      WITH LOGIN PASSWORD 'auth_password';
+  END IF;
+END $$;
+
+GRANT CONNECT ON DATABASE suppavisor_backoffice
+TO auth_user;
+
+CREATE SCHEMA IF NOT EXISTS auth_data AUTHORIZATION role_migrate;
+GRANT USAGE, CREATE ON SCHEMA auth_data TO role_migrate;
+
+GRANT USAGE ON SCHEMA auth_data TO auth_user;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON ALL TABLES IN SCHEMA auth_data
+TO auth_user;
+
+GRANT USAGE, SELECT
+ON ALL SEQUENCES IN SCHEMA auth_data
+TO auth_user;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE role_migrate IN SCHEMA auth_data
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO auth_user;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE role_migrate IN SCHEMA auth_data
+GRANT USAGE, SELECT ON SEQUENCES TO auth_user;
 ```

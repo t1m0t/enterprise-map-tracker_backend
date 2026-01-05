@@ -1,44 +1,51 @@
 import asyncio
 import json
 import os
-from crawl4ai import JsonCssExtractionStrategy, AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai import (
+    JsonCssExtractionStrategy,
+    AsyncWebCrawler,
+    BrowserConfig,
+    CrawlerRunConfig,
+)
+
 
 async def main():
-    BASE_URL = os.getenv('SCRAPPING_BASE_URL')
-    if not BASE_URL:
-        raise ValueError("SCRAPPING_BASE_URL environment variable is not set.")
-
     tahsils = []
 
     with open("ressources/tahsil.json", "r") as f:
         jsonRes = json.load(f)
         for item in jsonRes:
-            tahsils.append({
-                "url":  BASE_URL + item["tahsil_url"],
-                "tahsil_name": item["tahsil_name"],
-            })
+            tahsils.append(
+                {
+                    "url": item["tahsil_url"],
+                    "tahsil_name": item["tahsil_name"],
+                }
+            )
 
     schema = {
         "name": "Extract Village data",
         "baseSelector": "table tr:nth-child(n+2)",
         "fields": [
+            {"name": "village_name", "selector": "td:nth-child(2) a", "type": "text"},
             {
-                "name": "village_name",
-                "selector": "td:nth-child(2) a",
-                "type": "text"
+                "name": "village_census_code",
+                "selector": "td:nth-child(3)",
+                "type": "text",
+            },
+            {"name": "village_km2_area", "selector": "td:nth-child(4)", "type": "text"},
+            {
+                "name": "village_population",
+                "selector": "td:nth-child(5)",
+                "type": "text",
             },
             {
                 "name": "village_url",
                 "selector": "td:nth-child(2) a",
                 "type": "attribute",
-                "attribute": "href"
+                "attribute": "href",
             },
-            {
-                "name": "village_code",
-                "selector": "td:nth-child(3)",
-                "type": "text"
-            }
-        ]
+            {"name": "village_code", "selector": "td:nth-child(3)", "type": "text"},
+        ],
     }
 
     browser_conf = BrowserConfig(headless=True)  # or False to see the browser
@@ -46,13 +53,10 @@ async def main():
         extraction_strategy=JsonCssExtractionStrategy(schema, verbose=True)
     )
 
-    async with AsyncWebCrawler(verbose=True) as crawler:
+    async with AsyncWebCrawler(verbose=True, config=browser_conf) as crawler:
         jsonRes = []
         for tahsil in tahsils:
-            result = await crawler.arun(
-                url=tahsil["url"],
-                config=run_conf
-            )
+            result = await crawler.arun(url=tahsil["url"], config=run_conf)
             if not result.success:
                 print("Crawl failed:", result.error_message)
                 return
@@ -60,18 +64,19 @@ async def main():
             data = json.loads(result.extracted_content)
             # Add tahsil to each village item
             for item in data:
-                item['tahsil_name'] = tahsil['tahsil_name']
-                
+                item["tahsil_name"] = tahsil["tahsil_name"]
+
             print(f"Extracted {len(data)} villages from {tahsil['url']}")
             print(json.dumps(data, indent=2))
             jsonRes.extend(data)
-            await asyncio.sleep(30)
+            await asyncio.sleep(5)
 
         if jsonRes:
             with open("ressources/villages.json", "a") as f:
                 f.write(json.dumps(jsonRes, indent=2))
         else:
             print("No data extracted.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,11 +1,16 @@
 import { readdirSync, readFileSync } from "fs";
 import * as path from "path";
-import { SQL } from "bun"; // Assuming your custom SQL wrapper is exported like this
+import { SQL } from "bun";
 
 type ParsedMigration = {
 	name: string;
 	up: string;
 	down: string | null;
+	isTypeScript?: boolean;
+	module?: {
+		up: (tx: Bun.TransactionSQL) => Promise<void>;
+		down?: (tx: Bun.TransactionSQL) => Promise<void>;
+	};
 };
 
 type TEnvData = {
@@ -23,6 +28,8 @@ type TEnvData = {
 		password: string | undefined;
 	};
 };
+
+type AppliedMigration = { name: string };
 
 class MigrationManager {
 	private sqlClient: ReturnType<typeof SQL>;
@@ -101,10 +108,10 @@ class MigrationManager {
 	}
 
 	private async getAppliedMigrations(): Promise<Set<string>> {
-		const rows = await this.sqlClient<{ name: string }[]>`
+		const rows = await this.sqlClient<AppliedMigration[]>`
       SELECT name FROM backoffice_data.migrations ORDER BY id
     `;
-		return new Set(rows.map((r) => r.name));
+		return new Set(rows.map((r: AppliedMigration) => r.name));
 	}
 
 	public async migrate() {
@@ -125,12 +132,12 @@ class MigrationManager {
 			}
 
 			const filePath = this.getMigrationPath(file);
-			const parsed = this.parseMigrationFile(filePath, file);
+			const parsed = await this.parseMigrationFile(filePath, file);
 
 			console.log(`➡ Applying ${file} ...`);
 
 			try {
-				await this.sqlClient.begin(async (tx) => {
+				await this.sqlClient.begin(async (tx: Bun.TransactionSQL) => {
 					await tx.unsafe(parsed.up);
 					await tx`
               INSERT INTO backoffice_data.migrations (name)
@@ -138,7 +145,7 @@ class MigrationManager {
             `;
 				});
 				console.log(`√ Applied: ${file}`);
-			} catch (err) {
+			} catch (err: any) {
 				console.error(`❌ Failed on ${file}`);
 				console.error(err);
 				if (err.position)
@@ -161,7 +168,7 @@ class MigrationManager {
 		}
 
 		const filePath = this.getMigrationPath(last);
-		const parsed = this.parseMigrationFile(filePath, last);
+		const parsed = await this.parseMigrationFile(filePath, last);
 
 		if (!parsed.down) {
 			console.error(
@@ -175,7 +182,7 @@ class MigrationManager {
 
 		try {
 			if (this.sqlClient.begin) {
-				await this.sqlClient.begin(async (tx) => {
+				await this.sqlClient.begin(async (tx: Bun.TransactionSQL) => {
 					await tx(parsed.down as string);
 					await tx`
             DELETE FROM backoffice_data.migrations WHERE name = ${last}
@@ -188,7 +195,7 @@ class MigrationManager {
         `;
 			}
 			console.log(`√ Rolled back: ${last}`);
-		} catch (err) {
+		} catch (err: any) {
 			console.error(`❌ Failed to rollback ${last}`);
 			console.error(err);
 			if (err.position)
@@ -201,11 +208,48 @@ class MigrationManager {
 
 	private listMigrationFiles(): string[] {
 		return readdirSync(this.migrationDir)
-			.filter((f) => f.endsWith(".sql"))
+			.filter((f) => f.endsWith(".sql") || f.endsWith(".ts"))
 			.sort();
 	}
 
-	private parseMigrationFile(filePath: string, name: string): ParsedMigration {
+	private async parseMigrationFile(
+		filePath: string,
+		name: string,
+	): Promise<ParsedMigration> {
+		const isTypeScript = name.endsWith(".ts");
+
+		if (isTypeScript) {
+			return this.parseTypeScriptMigration(filePath, name);
+		}
+
+		return this.parseSqlMigration(filePath, name);
+	}
+
+	private async parseTypeScriptMigration(
+		filePath: string,
+		name: string,
+	): Promise<ParsedMigration> {
+		const mod = await import(path.resolve(filePath));
+
+		if (!mod.up || typeof mod.up !== "function") {
+			throw new Error(
+				`TypeScript migration ${name} must export an "up" function`,
+			);
+		}
+
+		return {
+			name,
+			up: "", // Not used for TS migrations
+			down: mod.down ? "" : null, // Not used for TS migrations
+			isTypeScript: true,
+			module: {
+				up: mod.up,
+				down: mod.down,
+			},
+		};
+	}
+
+	private parseSqlMigration(filePath: string, name: string): ParsedMigration {
 		const content = readFileSync(filePath, "utf8");
 
 		const upMarker = /^--\s*migrate:up\s*$/im;
